@@ -54,15 +54,6 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Setup pnpm
-        run: npm install -g pnpm@10
-
-      - name: Install root dependencies
-        run: pnpm install
-
-      - name: Build
-        run: pnpm build
-
       - name: Install .GITOPENCLAW dependencies
         run: cd .GITOPENCLAW && bun install
 

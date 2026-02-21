@@ -79,6 +79,7 @@ import { resolve } from "path";
 // `import.meta.dir` resolves to `.GITOPENCLAW/lifecycle/`; stepping up one level
 // gives us the `.GITOPENCLAW/` directory which contains `state/` and `node_modules/`.
 const gitopenclawDir = resolve(import.meta.dir, "..");
+const repoRoot = resolve(gitopenclawDir, "..");
 const stateDir = resolve(gitopenclawDir, "state");
 const issuesDir = resolve(stateDir, "issues");
 const sessionsDir = resolve(stateDir, "sessions");
@@ -281,10 +282,30 @@ try {
   const resolvedSessionId = sessionId || `issue-${issueNumber}`;
   openclawArgs.push("--session-id", resolvedSessionId);
 
+  // ── Runtime isolation: source stays raw, runtime goes in .GITOPENCLAW ──────
+  // Write a temporary config that points the agent's workspace at the repo root
+  // so it can read the raw source code.  All mutable state (sessions, memory,
+  // sqlite, caches) is kept inside .GITOPENCLAW/state/ via OPENCLAW_STATE_DIR.
+  const runtimeConfig = {
+    agents: {
+      defaults: {
+        workspace: repoRoot,
+      },
+    },
+  };
+  const runtimeConfigPath = "/tmp/openclaw-runtime.json";
+  writeFileSync(runtimeConfigPath, JSON.stringify(runtimeConfig, null, 2));
+
+  const agentEnv = {
+    ...process.env,
+    OPENCLAW_STATE_DIR: stateDir,
+    OPENCLAW_CONFIG_PATH: runtimeConfigPath,
+  };
+
   // Pipe agent output through `tee` so we get:
   //   • a live stream to stdout (visible in the Actions log in real time), and
   //   • a persisted copy at `/tmp/agent-raw.json` for post-processing below.
-  const agent = Bun.spawn(openclawArgs, { stdout: "pipe", stderr: "inherit" });
+  const agent = Bun.spawn(openclawArgs, { stdout: "pipe", stderr: "inherit", env: agentEnv, cwd: repoRoot });
   const tee = Bun.spawn(["tee", "/tmp/agent-raw.json"], { stdin: agent.stdout, stdout: "inherit" });
 
   // ── Timeout-aware wait for output capture ──────────────────────────────────
@@ -376,9 +397,10 @@ try {
   console.log(`Saved mapping: issue #${issueNumber} -> ${resolvedSessionId}`);
 
   // ── Commit and push state changes ───────────────────────────────────────────
-  // Stage all changes (session log, mapping JSON, any files the agent edited),
-  // commit only if the index is dirty, then push with a retry-on-conflict loop.
-  await run(["git", "add", "-A"]);
+  // Stage only .GITOPENCLAW/ changes (runtime state, session mappings, memory).
+  // Source code outside .GITOPENCLAW/ is never modified — the agent reads it
+  // as raw context but all mutable state stays inside the .GITOPENCLAW/ tree.
+  await run(["git", "add", ".GITOPENCLAW/"]);
   const { exitCode } = await run(["git", "diff", "--cached", "--quiet"]);
   if (exitCode !== 0) {
     // exitCode !== 0 means there are staged changes to commit.

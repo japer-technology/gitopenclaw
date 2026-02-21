@@ -45,6 +45,21 @@ More providers are supported by OpenClaw — see the [OpenClaw documentation](ht
 - **Owner/member-only**: The workflow checks collaborator permissions before running
 - **Bot comment filtering**: The agent ignores its own comments to prevent loops
 - **Git-native audit trail**: Every action is committed and visible in git history
+- **GitHub-based credentials**: All API keys live in GitHub Actions secrets — no credentials stored in repository files
+- **Scoped commits**: Only `.GITOPENCLAW/` state is committed; source code outside `.GITOPENCLAW/` is never modified
+
+## Architecture — source stays raw
+
+`.GITOPENCLAW` is designed around a strict separation:
+
+| Concern | Location | Mutability |
+|---|---|---|
+| **Source code** | Repository root (outside `.GITOPENCLAW/`) | Read-only — never modified by the agent |
+| **Runtime state** | `.GITOPENCLAW/state/` | Mutable — sessions, memory, mappings committed as audit trail |
+| **OpenClaw internals** | `.GITOPENCLAW/state/` (gitignored subdirs) | Ephemeral — caches, sqlite, sandbox regenerated each run |
+| **Credentials** | GitHub Actions secrets only | Never stored in files |
+
+The agent reads the raw source code as workspace context but stores all runtime data (sessions, memory, sqlite, caches) inside `.GITOPENCLAW/state/` via `OPENCLAW_STATE_DIR`. This ensures the repository source remains untouched.
 
 ## Configuration
 
@@ -75,6 +90,7 @@ Settings are stored in `.GITOPENCLAW/config/settings.json`:
 │   ├── GITOPENCLAW-WORKFLOW-AGENT.yml # Workflow template
 │   └── ...                            # Templates and config
 ├── state/
+│   ├── .gitignore                     # Excludes OpenClaw internals (caches, sqlite, etc.)
 │   ├── memory.log                     # Append-only memory
 │   ├── user.md                        # User profile
 │   ├── issues/                        # Issue → session mappings

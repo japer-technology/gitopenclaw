@@ -179,8 +179,8 @@ describe("Reaction indicator", () => {
 describe("Commit and push with retry", () => {
   const agent = readFile(".GITOPENCLAW/lifecycle/GITOPENCLAW-AGENT.ts");
 
-  it("stages all changes with git add", () => {
-    assert.ok(agent.includes('"git", "add"'));
+  it("stages only .GITOPENCLAW/ changes with git add", () => {
+    assert.ok(agent.includes('"git", "add", ".GITOPENCLAW/"'));
   });
 
   it("commits with descriptive message", () => {
@@ -440,5 +440,91 @@ describe("OpenClaw integration", () => {
   it("package.json depends on openclaw", () => {
     const pkg = JSON.parse(readFile(".GITOPENCLAW/package.json"));
     assert.ok(pkg.dependencies.openclaw, "package.json must depend on openclaw");
+  });
+
+  it("package.json uses published npm version (not file: link)", () => {
+    const pkg = JSON.parse(readFile(".GITOPENCLAW/package.json"));
+    const version = pkg.dependencies.openclaw;
+    assert.ok(
+      !version.startsWith("file:"),
+      "openclaw dependency must use a published npm version, not file: link"
+    );
+  });
+});
+
+// ── Runtime isolation — source stays raw, state in .GITOPENCLAW ────────────
+
+describe("Runtime isolation", () => {
+  const agent = readFile(".GITOPENCLAW/lifecycle/GITOPENCLAW-AGENT.ts");
+
+  it("sets OPENCLAW_STATE_DIR to .GITOPENCLAW/state", () => {
+    assert.ok(
+      agent.includes("OPENCLAW_STATE_DIR"),
+      "Agent must set OPENCLAW_STATE_DIR to keep runtime state inside .GITOPENCLAW"
+    );
+    assert.ok(
+      agent.includes("stateDir"),
+      "Agent must reference the stateDir path"
+    );
+  });
+
+  it("sets OPENCLAW_CONFIG_PATH for runtime config", () => {
+    assert.ok(
+      agent.includes("OPENCLAW_CONFIG_PATH"),
+      "Agent must set OPENCLAW_CONFIG_PATH for workspace isolation"
+    );
+  });
+
+  it("writes runtime config with workspace pointing to repo root", () => {
+    assert.ok(
+      agent.includes("runtimeConfig"),
+      "Agent must generate a runtime config"
+    );
+    assert.ok(
+      agent.includes("repoRoot"),
+      "Agent must reference repoRoot for workspace"
+    );
+  });
+
+  it("passes env and cwd to agent subprocess", () => {
+    assert.ok(
+      agent.includes("agentEnv"),
+      "Agent subprocess must receive isolated environment"
+    );
+    assert.ok(
+      agent.includes("cwd: repoRoot"),
+      "Agent subprocess must run from repo root"
+    );
+  });
+
+  it("only stages .GITOPENCLAW/ files (source is read-only)", () => {
+    assert.ok(
+      agent.includes('"git", "add", ".GITOPENCLAW/"'),
+      "git add must be scoped to .GITOPENCLAW/ only"
+    );
+    assert.ok(
+      !agent.includes('"git", "add", "-A"'),
+      "git add must NOT use -A (would stage source changes)"
+    );
+  });
+
+  it("state/.gitignore excludes openclaw internals", () => {
+    const gitignore = readFile(".GITOPENCLAW/state/.gitignore");
+    assert.ok(gitignore.includes("agents/"), "Must exclude agents/ directory");
+    assert.ok(gitignore.includes("cache/"), "Must exclude cache/ directory");
+    assert.ok(gitignore.includes("credentials/"), "Must exclude credentials/ directory");
+    assert.ok(gitignore.includes("*.db"), "Must exclude sqlite databases");
+  });
+
+  it("workflow does not build root project", () => {
+    const workflow = readFile(".github/workflows/GITOPENCLAW-WORKFLOW-AGENT.yml");
+    assert.ok(
+      !workflow.includes("pnpm install"),
+      "Workflow must not install root dependencies (uses published openclaw)"
+    );
+    assert.ok(
+      !workflow.includes("pnpm build"),
+      "Workflow must not build root project"
+    );
   });
 });
