@@ -1,5 +1,11 @@
 # GitOpenClaw — Quick Start 🦞
 
+<p align="center">
+  <picture>
+    <img src="GITOPENCLAW-LOGO.png" alt="GitOpenClaw" width="500">
+  </picture>
+</p>
+
 Get a working AI agent in your GitHub repository in 5 minutes.
 
 ---

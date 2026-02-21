@@ -1,5 +1,11 @@
 # .GITOPENCLAW 🦞
 
+<p align="center">
+  <picture>
+    <img src="GITOPENCLAW-LOGO.png" alt="GitOpenClaw" width="500">
+  </picture>
+</p>
+
 ### An AI agent that lives in your GitHub repository — powered by OpenClaw
 
 > Drop a folder. Push. Open an issue. Talk to your agent.
