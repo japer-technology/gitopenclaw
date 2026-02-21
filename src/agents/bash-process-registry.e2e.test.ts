@@ -119,16 +119,17 @@ describe("bash process registry", () => {
   });
 
   it("killAllSessions kills running children and clears registries", () => {
-    const killFn = vi.fn();
-    const child = {
+    const killFnA = vi.fn();
+    const killFnB = vi.fn();
+    const childA = {
       pid: 100,
-      kill: killFn,
+      kill: killFnA,
       removeAllListeners: vi.fn(),
     } as unknown as ChildProcessWithoutNullStreams;
     const session = createProcessSessionFixture({
       id: "kill-test",
       command: "sleep 60",
-      child,
+      child: childA,
       maxOutputChars: 1000,
     });
     addSession(session);
@@ -139,7 +140,7 @@ describe("bash process registry", () => {
       command: "sleep 120",
       child: {
         pid: 200,
-        kill: killFn,
+        kill: killFnB,
         removeAllListeners: vi.fn(),
       } as unknown as ChildProcessWithoutNullStreams,
       maxOutputChars: 1000,
@@ -148,7 +149,8 @@ describe("bash process registry", () => {
 
     killAllSessions();
 
-    expect(killFn).toHaveBeenCalledWith("SIGKILL");
+    expect(killFnA).toHaveBeenCalledWith("SIGKILL");
+    expect(killFnB).toHaveBeenCalledWith("SIGKILL");
     expect(getSession("kill-test")).toBeUndefined();
     expect(getSession("kill-test-bg")).toBeUndefined();
     expect(listRunningSessions()).toHaveLength(0);
