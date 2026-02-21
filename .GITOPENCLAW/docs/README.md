@@ -1,5 +1,11 @@
 # .GITOPENCLAW 🦞 Documentation
 
+<p align="center">
+  <picture>
+    <img src="../GITOPENCLAW-LOGO.png" alt="GitOpenClaw" width="500">
+  </picture>
+</p>
+
 ### Guides and reference material for GitOpenClaw
 
 - [GITOPENCLAW-How-it-should-be-done.md](GITOPENCLAW-How-it-should-be-done.md) — The definitive guide: fork-as-installation, architecture, execution model, and update flow
