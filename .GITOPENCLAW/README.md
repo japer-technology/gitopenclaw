@@ -1,4 +1,6 @@
-# japer-technology/gitopenclaw 🦞 GH as Infrastructure
+# japer-technology/gitopenclaw
+
+### OpenClaw AI Agent using HitHub as Infrastructure
 
 <p align="center">
   <picture>
