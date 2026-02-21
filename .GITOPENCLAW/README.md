@@ -1,4 +1,4 @@
-# japer-technology/gitopenclam 🦞 GH as Infrastructure
+# japer-technology/gitopenclaw 🦞 GH as Infrastructure
 
 <p align="center">
   <picture>
