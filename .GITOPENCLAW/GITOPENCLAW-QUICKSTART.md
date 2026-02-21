@@ -1,6 +1,6 @@
 # .GITOPENCLAW 🦞 Quick Start
 
-### GitHub as AI Infrastructure
+### Easy OpenClaw using GitHub as AI Infrastructure
 
 <p align="center">
   <picture>
