@@ -1,6 +1,6 @@
-# .GITOPENCLAW 🦞 Quick Start 🦞
+# .GITOPENCLAW 🦞 Quick Start
 
-### Get a working AI agent in your GitHub repository in 5 minutes.
+### GitHub as AI Infrastructure
 
 <p align="center">
   <picture>
