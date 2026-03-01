@@ -83,7 +83,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync, unlin
 import { resolve } from "path";
 import { resolveTrustLevel } from "./trust-level.ts";
 import type { TrustPolicy } from "./trust-level.ts";
-import { parseCommand, MUTATION_COMMANDS } from "./command-parser.ts";
+import { parseCommand, MUTATION_COMMANDS, SUPPORTED_COMMANDS } from "./command-parser.ts";
 
 // ─── Paths and event context ───────────────────────────────────────────────────
 // `import.meta.dir` resolves to `.GITOPENCLAW/lifecycle/`; stepping up one level
@@ -393,7 +393,7 @@ try {
   // For structured slash commands (anything other than natural language "agent"),
   // build and run the corresponding `openclaw <command> <args>` CLI invocation
   // and post the output directly — no agent session needed.
-  if (parsedCmd.command !== "agent" && parsedCmd.command in (await import("./command-parser.ts")).SUPPORTED_COMMANDS) {
+  if (parsedCmd.command !== "agent" && parsedCmd.command in SUPPORTED_COMMANDS) {
     const openclawBin = resolve(gitopenclawDir, "node_modules", ".bin", "openclaw");
     const slashArgs = [openclawBin, parsedCmd.command, ...parsedCmd.args];
     console.log(`Executing slash command: ${slashArgs.join(" ")}`);
