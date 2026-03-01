@@ -402,6 +402,40 @@ try {
   // For structured slash commands (anything other than natural language "agent"),
   // build and run the corresponding `openclaw <command> <args>` CLI invocation
   // and post the output directly — no agent session needed.
+  //
+  // The `/help` command is handled locally (no openclaw binary needed) by
+  // generating a formatted list of all supported slash commands from the
+  // SUPPORTED_COMMANDS registry.
+  if (parsedCmd.command === "help") {
+    const lines = ["## 📖 Available Slash Commands\n"];
+    const readOnly: string[] = [];
+    const mutation: string[] = [];
+    for (const [name, desc] of Object.entries(SUPPORTED_COMMANDS)) {
+      if (name === "agent") continue; // agent is the natural-language default, not a slash command
+      const entry = `| \`/${name}\` | ${desc.description} |`;
+      if (desc.mutation) {
+        mutation.push(entry);
+      } else {
+        readOnly.push(entry);
+      }
+    }
+    lines.push("### Read-only commands\n");
+    lines.push("| Command | Description |");
+    lines.push("|---------|-------------|");
+    lines.push(...readOnly);
+    lines.push("\n### Mutation commands *(trusted users only)*\n");
+    lines.push("| Command | Description |");
+    lines.push("|---------|-------------|");
+    lines.push(...mutation);
+    lines.push(
+      "\n---\n" +
+        "💡 **Tip:** Try `/status` or `/doctor` as an easy first command.\n\n" +
+        "Any comment without a `/` prefix is sent to the AI agent as natural language.",
+    );
+    await gh("issue", "comment", String(issueNumber), "--body", lines.join("\n"));
+    process.exit(0);
+  }
+
   if (parsedCmd.command !== "agent" && parsedCmd.command in SUPPORTED_COMMANDS) {
     const openclawBin = resolve(gitopenclawDir, "node_modules", ".bin", "openclaw");
     const slashArgs = [openclawBin, parsedCmd.command, ...parsedCmd.args];
@@ -440,18 +474,24 @@ try {
   openclawArgs.push("--session-id", resolvedSessionId);
 
   // ── Apply workflowTimeoutMinutes as --timeout (Task 0.3) ──────────────────
+  // The --timeout flag expects seconds; convert from the minutes value in settings.
   if (configuredLimits?.workflowTimeoutMinutes) {
-    openclawArgs.push("--timeout", String(configuredLimits.workflowTimeoutMinutes));
+    openclawArgs.push("--timeout", String(configuredLimits.workflowTimeoutMinutes * 60));
   }
 
   // ── Runtime isolation: source stays raw, runtime goes in .GITOPENCLAW ──────
   // Write a temporary config that points the agent's workspace at the repo root
   // so it can read the raw source code.  All mutable state (sessions, memory,
   // sqlite, caches) is kept inside .GITOPENCLAW/state/ via OPENCLAW_STATE_DIR.
+  // Also set timeoutSeconds so the embedded runner has a reasonable default
+  // even when the --timeout flag is not passed or is overridden.
   const runtimeConfig = {
     agents: {
       defaults: {
         workspace: repoRoot,
+        timeoutSeconds: configuredLimits?.workflowTimeoutMinutes
+          ? configuredLimits.workflowTimeoutMinutes * 60
+          : 600,
       },
     },
   };
