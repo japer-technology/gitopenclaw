@@ -1,6 +1,5 @@
 import type { ProgressReporter } from "../../cli/progress.js";
 import { resolveGatewayLogPaths } from "../../daemon/launchd.js";
-import type { GitOpenClawCIContext } from "../../infra/ci-context.js";
 import { formatPortDiagnostics } from "../../infra/ports.js";
 import {
   type RestartSentinelPayload,
@@ -62,7 +61,6 @@ export async function appendStatusAllDiagnosis(params: {
   channelIssues: ChannelIssueLike[];
   gatewayReachable: boolean;
   health: unknown;
-  ciCtx?: GitOpenClawCIContext;
 }) {
   const { lines, muted, ok, warn, fail } = params;
 
@@ -81,9 +79,7 @@ export async function appendStatusAllDiagnosis(params: {
   }
 
   lines.push("");
-  if (params.ciCtx?.configPath) {
-    emitCheck(`Config: ${params.ciCtx.configPath} (.GITOPENCLAW — repo-managed)`, "ok");
-  } else if (params.snap) {
+  if (params.snap) {
     const status = !params.snap.exists ? "fail" : params.snap.valid ? "ok" : "warn";
     emitCheck(`Config: ${params.snap.path ?? "(unknown)"}`, status);
     const issues = [...(params.snap.legacyIssues ?? []), ...(params.snap.issues ?? [])];

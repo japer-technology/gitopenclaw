@@ -393,9 +393,7 @@ describe("statusCommand", () => {
     expect(logs.some((l: string) => l.includes("+1000"))).toBe(true);
     expect(logs.some((l: string) => l.includes("50%"))).toBe(true);
     expect(logs.some((l: string) => l.includes("40% cached"))).toBe(true);
-    expect(
-      logs.some((l: string) => l.includes("LaunchAgent") || l.includes("n/a (CI environment)")),
-    ).toBe(true);
+    expect(logs.some((l: string) => l.includes("LaunchAgent"))).toBe(true);
     expect(logs.some((l: string) => l.includes("FAQ:"))).toBe(true);
     expect(logs.some((l: string) => l.includes("Troubleshooting:"))).toBe(true);
     expect(logs.some((l: string) => l.includes("Next steps:"))).toBe(true);
