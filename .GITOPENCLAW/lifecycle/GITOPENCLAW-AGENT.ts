@@ -79,11 +79,19 @@
  * - Bun runtime                   — for Bun.spawn and top-level await
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync, unlinkSync, appendFileSync } from "fs";
+import {
+  existsSync,
+  readFileSync,
+  writeFileSync,
+  mkdirSync,
+  copyFileSync,
+  unlinkSync,
+  appendFileSync,
+} from "fs";
 import { resolve } from "path";
+import { parseCommand, SUPPORTED_COMMANDS, isMutationInvocation } from "./command-parser.ts";
 import { resolveTrustLevel } from "./trust-level.ts";
 import type { TrustPolicy } from "./trust-level.ts";
-import { parseCommand, MUTATION_COMMANDS, SUPPORTED_COMMANDS } from "./command-parser.ts";
 
 // ─── Paths and event context ───────────────────────────────────────────────────
 // `import.meta.dir` resolves to `.GITOPENCLAW/lifecycle/`; stepping up one level
@@ -142,7 +150,9 @@ const configuredProvider: string = settings.defaultProvider;
 const configuredModel: string = settings.defaultModel;
 const configuredThinkingLevel: string = settings.defaultThinkingLevel ?? "high";
 const configuredTrustPolicy: TrustPolicy | undefined = settings.trustPolicy;
-const configuredLimits: { maxTokensPerRun?: number; maxToolCallsPerRun?: number; workflowTimeoutMinutes?: number } | undefined = settings.limits;
+const configuredLimits:
+  | { maxTokensPerRun?: number; maxToolCallsPerRun?: number; workflowTimeoutMinutes?: number }
+  | undefined = settings.limits;
 
 if (!configuredProvider || !configuredModel) {
   throw new Error(`Invalid settings at ${settingsPath}: expected defaultProvider and defaultModel`);
@@ -284,6 +294,12 @@ try {
   // ── Validate provider API key ────────────────────────────────────────────────
   // This check is inside the try block so that the finally clause always runs
   // (removing the 👀 reaction) and a helpful comment can be posted to the issue.
+  // ── Slash command parsing (Task 1.1) ───────────────────────────────────────
+  // Parse the original event text before any trust-mode prompt injection so
+  // slash commands still work for semi-trusted users in read-only mode.
+  const parsedCmd = parseCommand(prompt);
+  console.log(`Command parse: command=${parsedCmd.command}, args=[${parsedCmd.args.join(", ")}]`);
+
   const providerKeyMap: Record<string, string> = {
     anthropic: "ANTHROPIC_API_KEY",
     openai: "OPENAI_API_KEY",
@@ -368,15 +384,8 @@ try {
     );
   }
 
-  // ── Slash command parsing (Task 1.1) ─────────────────────────────────────────
-  // Parse the prompt to detect slash commands (e.g., `/status`, `/config set …`).
-  // If a recognized slash command is found, route to the appropriate openclaw CLI
-  // subcommand.  Otherwise fall through to the default agent invocation.
-  const parsedCmd = parseCommand(prompt);
-  console.log(`Command parse: command=${parsedCmd.command}, args=[${parsedCmd.args.join(", ")}]`);
-
   // Block mutation commands for semi-trusted actors.
-  if (trustLevel === "semi-trusted" && MUTATION_COMMANDS.has(parsedCmd.command)) {
+  if (trustLevel === "semi-trusted" && isMutationInvocation(parsedCmd.command, parsedCmd.args)) {
     await gh(
       "issue",
       "comment",
@@ -402,7 +411,9 @@ try {
     const slashOutput = slashResult.stdout || "(no output)";
     const slashComment =
       `### \`/${parsedCmd.command}${parsedCmd.args.length ? " " + parsedCmd.args.join(" ") : ""}\`\n\n` +
-      "```\n" + slashOutput.slice(0, MAX_COMMENT_LENGTH - 200) + "\n```" +
+      "```\n" +
+      slashOutput.slice(0, MAX_COMMENT_LENGTH - 200) +
+      "\n```" +
       (slashResult.exitCode !== 0 ? `\n\n⚠️ Command exited with code ${slashResult.exitCode}` : "");
     await gh("issue", "comment", String(issueNumber), "--body", slashComment);
     process.exit(0);
@@ -607,7 +618,12 @@ try {
           const entry = JSON.parse(line);
           // Check multiple JSONL format variants: OpenClaw transcripts may use
           // different schemas depending on version (role-based or type-based).
-          if (entry.role === "tool" || entry.type === "tool_call" || entry.type === "tool-call" || entry.type === "tool_use") {
+          if (
+            entry.role === "tool" ||
+            entry.type === "tool_call" ||
+            entry.type === "tool-call" ||
+            entry.type === "tool_use"
+          ) {
             toolCallCount++;
           }
         } catch {
@@ -654,7 +670,9 @@ try {
 
   // Check tool-call limit violation
   if (configuredLimits?.maxToolCallsPerRun && toolCallCount > configuredLimits.maxToolCallsPerRun) {
-    console.log(`⚠️ Tool-call limit exceeded: ${toolCallCount} > ${configuredLimits.maxToolCallsPerRun}`);
+    console.log(
+      `⚠️ Tool-call limit exceeded: ${toolCallCount} > ${configuredLimits.maxToolCallsPerRun}`,
+    );
     await gh(
       "issue",
       "comment",
