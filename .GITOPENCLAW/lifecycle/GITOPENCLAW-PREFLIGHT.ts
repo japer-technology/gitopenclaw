@@ -117,7 +117,7 @@ if (existsSync(settingsPath) && existsSync(schemaPath)) {
     // ── Validate trustPolicy (Task 0.2) ─────────────────────────────────────
     if (settings.trustPolicy != null) {
       const tp = settings.trustPolicy;
-      if (typeof tp !== "object" || Array.isArray(tp)) {
+      if (tp === null || typeof tp !== "object" || Array.isArray(tp)) {
         errors.push('settings.json: "trustPolicy" must be an object');
       } else {
         if (tp.trustedUsers != null) {

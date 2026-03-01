@@ -154,6 +154,11 @@ if (!configuredProvider || !configuredModel) {
 //   ACTOR_PERMISSION — set by the Authorize step (admin/maintain/write/read/none)
 const actor = process.env.GITHUB_ACTOR ?? "";
 const actorPermission = process.env.ACTOR_PERMISSION ?? "none";
+
+if (!actor) {
+  throw new Error("GITHUB_ACTOR is not set — cannot resolve trust level outside GitHub Actions");
+}
+
 const trustLevel = resolveTrustLevel(actor, actorPermission, configuredTrustPolicy);
 console.log(`Trust resolution: actor=${actor}, permission=${actorPermission}, level=${trustLevel}`);
 
@@ -337,6 +342,11 @@ try {
       "Only answer questions and provide information based on the repository contents.\n\n";
     prompt = readOnlyDirective + prompt;
 
+    // Write a tool-policy override for audit purposes.  The format mirrors
+    // OpenClaw's internal tool-profile structure (profile name + deny list).
+    // This file is NOT consumed by the agent subprocess (which uses system-prompt
+    // restriction); it exists solely for post-run audit and is deleted in the
+    // finally block to avoid stale permissions on subsequent runs.
     writeFileSync(
       toolPolicyOverridePath,
       JSON.stringify({ profile: "minimal", deny: ["bash", "edit", "create"] }, null, 2) + "\n",
