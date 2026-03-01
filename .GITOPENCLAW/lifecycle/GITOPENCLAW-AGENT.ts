@@ -142,9 +142,7 @@ const configuredThinkingLevel: string = settings.defaultThinkingLevel ?? "high";
 const configuredTrustPolicy: TrustPolicy | undefined = settings.trustPolicy;
 
 if (!configuredProvider || !configuredModel) {
-  throw new Error(
-    `Invalid settings at ${settingsPath}: expected defaultProvider and defaultModel`
-  );
+  throw new Error(`Invalid settings at ${settingsPath}: expected defaultProvider and defaultModel`);
 }
 
 // ─── Trust-level resolution ───────────────────────────────────────────────────
@@ -175,10 +173,13 @@ const toolPolicyOverridePath = resolve(stateDir, "tool-policy-override.json");
  * @param opts - Optional options; `stdin` can be piped from another process.
  * @returns    - `{ exitCode, stdout }` after the process has exited.
  */
-async function run(cmd: string[], opts?: { stdin?: any }): Promise<{ exitCode: number; stdout: string }> {
+async function run(
+  cmd: string[],
+  opts?: { stdin?: Bun.SpawnOptions.OptionsObject["stdin"] },
+): Promise<{ exitCode: number; stdout: string }> {
   const proc = Bun.spawn(cmd, {
     stdout: "pipe",
-    stderr: "inherit",   // surface errors directly in the Actions log
+    stderr: "inherit", // surface errors directly in the Actions log
     stdin: opts?.stdin,
   });
   const stdout = await new Response(proc.stdout).text();
@@ -287,26 +288,28 @@ try {
   const requiredKeyName = providerKeyMap[configuredProvider];
   if (requiredKeyName && !process.env[requiredKeyName]) {
     await gh(
-      "issue", "comment", String(issueNumber),
+      "issue",
+      "comment",
+      String(issueNumber),
       "--body",
       `## ⚠️ Missing API Key: \`${requiredKeyName}\`\n\n` +
-      `The configured provider is \`${configuredProvider}\`, but the \`${requiredKeyName}\` secret is not available to this workflow run.\n\n` +
-      `### How to fix\n\n` +
-      `**Option A — Repository secret** _(simplest)_\n` +
-      `1. Go to **Settings → Secrets and variables → Actions → New repository secret**\n` +
-      `2. Name: \`${requiredKeyName}\`, Value: your API key\n\n` +
-      `**Option B — Organization secret** _(already have one?)_\n` +
-      `Organization secrets are only available to workflows if the secret has been explicitly granted to this repository:\n` +
-      `1. Go to your **Organization Settings → Secrets and variables → Actions**\n` +
-      `2. Click the \`${requiredKeyName}\` secret → **Repository access**\n` +
-      `3. Add **this repository** to the selected repositories list\n\n` +
-      `Once the secret is accessible, re-trigger this workflow by posting a new comment on this issue.`
+        `The configured provider is \`${configuredProvider}\`, but the \`${requiredKeyName}\` secret is not available to this workflow run.\n\n` +
+        `### How to fix\n\n` +
+        `**Option A — Repository secret** _(simplest)_\n` +
+        `1. Go to **Settings → Secrets and variables → Actions → New repository secret**\n` +
+        `2. Name: \`${requiredKeyName}\`, Value: your API key\n\n` +
+        `**Option B — Organization secret** _(already have one?)_\n` +
+        `Organization secrets are only available to workflows if the secret has been explicitly granted to this repository:\n` +
+        `1. Go to your **Organization Settings → Secrets and variables → Actions**\n` +
+        `2. Click the \`${requiredKeyName}\` secret → **Repository access**\n` +
+        `3. Add **this repository** to the selected repositories list\n\n` +
+        `Once the secret is accessible, re-trigger this workflow by posting a new comment on this issue.`,
     );
     throw new Error(
       `${requiredKeyName} is not available to this workflow run. ` +
-      `If you have set it as a repository secret, verify the secret name matches exactly. ` +
-      `If you have set it as an organization secret, ensure this repository has been granted access ` +
-      `(Organization Settings → Secrets and variables → Actions → ${requiredKeyName} → Repository access).`
+        `If you have set it as a repository secret, verify the secret name matches exactly. ` +
+        `If you have set it as an organization secret, ensure this repository has been granted access ` +
+        `(Organization Settings → Secrets and variables → Actions → ${requiredKeyName} → Repository access).`,
     );
   }
 
@@ -317,15 +320,21 @@ try {
     const behavior = configuredTrustPolicy?.untrustedBehavior ?? "read-only-response";
     if (behavior === "block") {
       await gh(
-        "issue", "comment", String(issueNumber),
+        "issue",
+        "comment",
+        String(issueNumber),
         "--body",
         `⛔ **Access Denied**\n\nYour account (\`${actor}\`) does not have sufficient permissions to interact with the GitOpenClaw agent on this repository.`,
       );
-      throw new Error(`Untrusted actor "${actor}" blocked by trust policy (untrustedBehavior=block)`);
+      throw new Error(
+        `Untrusted actor "${actor}" blocked by trust policy (untrustedBehavior=block)`,
+      );
     }
     // "read-only-response" — post an explanation and exit gracefully.
     await gh(
-      "issue", "comment", String(issueNumber),
+      "issue",
+      "comment",
+      String(issueNumber),
       "--body",
       `ℹ️ **Read-Only Mode**\n\nYour account (\`${actor}\`) has \`${actorPermission}\` permission, which is below the trust threshold configured for this repository. The agent cannot perform actions on your behalf.\n\nIf you believe this is an error, ask a repository administrator to add your username to \`trustedUsers\` in \`.GITOPENCLAW/config/settings.json\`.`,
     );
@@ -351,7 +360,9 @@ try {
       toolPolicyOverridePath,
       JSON.stringify({ profile: "minimal", deny: ["bash", "edit", "create"] }, null, 2) + "\n",
     );
-    console.log(`Semi-trusted actor "${actor}" — wrote tool-policy override and injected read-only directive`);
+    console.log(
+      `Semi-trusted actor "${actor}" — wrote tool-policy override and injected read-only directive`,
+    );
   }
 
   // ── Run the OpenClaw agent (Approach A: CLI invocation) ─────────────────────
@@ -397,7 +408,12 @@ try {
   // Pipe agent output through `tee` so we get:
   //   • a live stream to stdout (visible in the Actions log in real time), and
   //   • a persisted copy at `/tmp/agent-raw.json` for post-processing below.
-  const agent = Bun.spawn(openclawArgs, { stdout: "pipe", stderr: "inherit", env: agentEnv, cwd: repoRoot });
+  const agent = Bun.spawn(openclawArgs, {
+    stdout: "pipe",
+    stderr: "inherit",
+    env: agentEnv,
+    cwd: repoRoot,
+  });
   const tee = Bun.spawn(["tee", "/tmp/agent-raw.json"], { stdin: agent.stdout, stdout: "inherit" });
 
   // ── Timeout-aware wait for output capture ──────────────────────────────────
@@ -447,17 +463,21 @@ try {
   // killed the process ourselves after the grace period — treat it as success.
   const agentExitCode = await agent.exited;
   if (agentExitCode !== 0 && agentExitCode !== 143) {
-    throw new Error(`openclaw agent exited with code ${agentExitCode}. Check the workflow logs above for details.`);
+    throw new Error(
+      `openclaw agent exited with code ${agentExitCode}. Check the workflow logs above for details.`,
+    );
   }
 
   // ── Extract final assistant text ─────────────────────────────────────────────
   // The `openclaw agent --json` command outputs a JSON envelope with a `payloads`
   // array containing the response text. Extract the text from the first payload.
   let agentText = "";
+  let parsedAgentOutput: unknown = null;
   try {
     const rawOutput = readFileSync("/tmp/agent-raw.json", "utf-8").trim();
     if (rawOutput) {
       const output = JSON.parse(rawOutput);
+      parsedAgentOutput = output;
       if (output.payloads && Array.isArray(output.payloads)) {
         agentText = output.payloads
           .map((p: { text?: string }) => p.text || "")
@@ -473,6 +493,44 @@ try {
     // If JSON parsing fails, try reading the raw output as plain text.
     const rawOutput = readFileSync("/tmp/agent-raw.json", "utf-8").trim();
     agentText = rawOutput;
+  }
+
+  // ── Semi-trusted audit: block disallowed tool activity ────────────────────
+  // The subprocess interface does not expose direct tool-profile flags. For
+  // semi-trusted users we enforce read-only mode via prompt directives and then
+  // audit reported tool calls to catch policy violations.
+  if (trustLevel === "semi-trusted") {
+    const deniedTools = new Set(["bash", "edit", "create"]);
+    const pendingToolCalls = Array.isArray(
+      (parsedAgentOutput as { meta?: { pendingToolCalls?: unknown[] } } | null)?.meta
+        ?.pendingToolCalls,
+    )
+      ? ((parsedAgentOutput as { meta?: { pendingToolCalls?: unknown[] } }).meta
+          ?.pendingToolCalls as unknown[])
+      : [];
+    const violations = pendingToolCalls.filter((call: unknown) => {
+      const toolName =
+        typeof call === "object" && call !== null && "name" in call
+          ? (call as { name?: unknown }).name
+          : undefined;
+      return typeof toolName === "string" && deniedTools.has(toolName);
+    });
+
+    if (violations.length > 0) {
+      const toolList = [...new Set(violations.map((call) => (call as { name: string }).name))].join(
+        ", ",
+      );
+      await gh(
+        "issue",
+        "comment",
+        String(issueNumber),
+        "--body",
+        `⚠️ **Trust Policy Violation Detected**\n\n` +
+          `Your request ran in semi-trusted mode, but the agent attempted restricted tool(s): ${toolList}.\n\n` +
+          `The workflow blocked this run to enforce read-only constraints. Please contact a maintainer if you need elevated access.`,
+      );
+      throw new Error(`Semi-trusted run attempted denied tool(s): ${toolList}`);
+    }
   }
 
   // ── Archive session transcript to git-tracked state/sessions/ ──────────────
@@ -500,12 +558,16 @@ try {
   // can locate the correct session and resume the conversation.
   writeFileSync(
     mappingFile,
-    JSON.stringify({
-      issueNumber,
-      sessionId: resolvedSessionId,
-      sessionPath,
-      updatedAt: new Date().toISOString(),
-    }, null, 2) + "\n"
+    JSON.stringify(
+      {
+        issueNumber,
+        sessionId: resolvedSessionId,
+        sessionPath,
+        updatedAt: new Date().toISOString(),
+      },
+      null,
+      2,
+    ) + "\n",
   );
   console.log(`Saved mapping: issue #${issueNumber} -> ${resolvedSessionId}`);
 
@@ -523,7 +585,9 @@ try {
   // Retry push up to 3 times, rebasing on each conflict to avoid force-pushing.
   for (let i = 1; i <= 3; i++) {
     const push = await run(["git", "push", "origin", `HEAD:${defaultBranch}`]);
-    if (push.exitCode === 0) break;
+    if (push.exitCode === 0) {
+      break;
+    }
     console.log(`Push failed, rebasing and retrying (${i}/3)...`);
     await run(["git", "pull", "--rebase", "origin", defaultBranch]);
   }
@@ -531,11 +595,11 @@ try {
   // ── Post reply as issue comment ──────────────────────────────────────────────
   // Guard against empty/null responses — post an error message instead of silence.
   const trimmedText = agentText.trim();
-  const commentBody = trimmedText.length > 0
-    ? trimmedText.slice(0, MAX_COMMENT_LENGTH)
-    : `✅ The agent ran successfully but did not produce a text response. Check the repository for any file changes that were made.\n\nFor full details, see the [workflow run logs](https://github.com/${repo}/actions).`;
+  const commentBody =
+    trimmedText.length > 0
+      ? trimmedText.slice(0, MAX_COMMENT_LENGTH)
+      : `✅ The agent ran successfully but did not produce a text response. Check the repository for any file changes that were made.\n\nFor full details, see the [workflow run logs](https://github.com/${repo}/actions).`;
   await gh("issue", "comment", String(issueNumber), "--body", commentBody);
-
 } finally {
   // ── Guaranteed cleanup: remove tool-policy override ─────────────────────────
   // Delete the tool-policy-override.json written for semi-trusted actors so
@@ -557,10 +621,20 @@ try {
       const { reactionId, reactionTarget, commentId } = reactionState;
       if (reactionTarget === "comment" && commentId) {
         // Delete the reaction from the triggering comment.
-        await gh("api", `repos/${repo}/issues/comments/${commentId}/reactions/${reactionId}`, "-X", "DELETE");
+        await gh(
+          "api",
+          `repos/${repo}/issues/comments/${commentId}/reactions/${reactionId}`,
+          "-X",
+          "DELETE",
+        );
       } else {
         // Delete the reaction from the issue itself.
-        await gh("api", `repos/${repo}/issues/${issueNumber}/reactions/${reactionId}`, "-X", "DELETE");
+        await gh(
+          "api",
+          `repos/${repo}/issues/${issueNumber}/reactions/${reactionId}`,
+          "-X",
+          "DELETE",
+        );
       }
     } catch (e) {
       // Log but do not re-throw — a failed cleanup should not mask the original error.

@@ -3,7 +3,7 @@
   "title": "GITOPENCLAW Settings",
   "description": "Configuration schema for .GITOPENCLAW/config/settings.json",
   "type": "object",
-  "required": ["defaultProvider", "defaultModel"],
+  "required": ["defaultProvider", "defaultModel", "defaultThinkingLevel"],
   "properties": {
     "defaultProvider": {
       "type": "string",
