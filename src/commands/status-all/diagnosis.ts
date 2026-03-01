@@ -81,7 +81,7 @@ export async function appendStatusAllDiagnosis(params: {
   }
 
   lines.push("");
-  if (params.ciCtx?.isCI && params.ciCtx.isGitOpenClaw && params.ciCtx.configPath) {
+  if (params.ciCtx?.configPath) {
     emitCheck(`Config: ${params.ciCtx.configPath} (.GITOPENCLAW — repo-managed)`, "ok");
   } else if (params.snap) {
     const status = !params.snap.exists ? "fail" : params.snap.valid ? "ok" : "warn";

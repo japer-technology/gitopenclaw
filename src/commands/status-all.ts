@@ -268,12 +268,11 @@ export async function statusAllCommand(
       { Item: "Node", Value: process.versions.node },
       {
         Item: "Config",
-        Value:
-          ciCtx.isCI && ciCtx.isGitOpenClaw && ciCtx.configPath
-            ? `${ciCtx.configPath} (.GITOPENCLAW)`
-            : snap?.path?.trim()
-              ? snap.path.trim()
-              : "(unknown config path)",
+        Value: ciCtx.configPath
+          ? `${ciCtx.configPath} (.GITOPENCLAW)`
+          : snap?.path?.trim()
+            ? snap.path.trim()
+            : "(unknown config path)",
       },
       dashboard
         ? { Item: "Dashboard", Value: dashboard }
