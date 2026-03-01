@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GITOPENCLAW Settings",
+  "description": "Configuration schema for .GITOPENCLAW/config/settings.json",
+  "type": "object",
+  "required": ["defaultProvider", "defaultModel"],
+  "properties": {
+    "defaultProvider": {
+      "type": "string",
+      "enum": ["anthropic", "openai", "google", "bedrock", "ollama"],
+      "description": "The AI provider to use for agent invocations"
+    },
+    "defaultModel": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The model identifier to use (must be non-empty)"
+    },
+    "defaultThinkingLevel": {
+      "type": "string",
+      "enum": ["none", "low", "medium", "high"],
+      "description": "The thinking level to pass to the agent"
+    }
+  },
+  "additionalProperties": true
+}
