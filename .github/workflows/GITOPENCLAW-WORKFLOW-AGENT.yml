@@ -27,6 +27,9 @@ jobs:
           PERM=$(gh api "repos/${{ github.repository }}/collaborators/${{ github.actor }}/permission" --jq '.permission' 2>/dev/null || echo "none")
           echo "Actor: ${{ github.actor }}, Permission: $PERM"
           echo "actor_permission=$PERM" >> "$GITHUB_OUTPUT"
+          if [[ "$PERM" != "admin" && "$PERM" != "maintain" && "$PERM" != "write" ]]; then
+            echo "::notice::Permission $PERM is below admin/maintain/write — trust gating deferred to agent"
+          fi
 
       - name: Checkout
         uses: actions/checkout@v4
