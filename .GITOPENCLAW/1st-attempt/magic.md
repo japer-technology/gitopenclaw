@@ -34,7 +34,7 @@ This is a focused map of the directories that drive model reasoning, tool use, c
 | `extensions/memory-core`        | Plugin-provided memory tool registration on top of core runtime.                       | Memory search/get tool registration and memory CLI integration.                                           |
 | `extensions/memory-lancedb`     | Alternative long-term memory backend implementation.                                   | LanceDB vector store plugin, embedding integration, auto-capture heuristics.                              |
 | `ui/src/ui`                     | Control-plane frontend that drives gateway chat/agent workflows.                       | Gateway client wiring, chat/tool stream handling, settings/session views.                                 |
-| `apps/shared/OpenNipperKit`     | Shared Apple client logic for protocol/chat/tool UX.                                   | Shared protocol models, chat UI components, gateway client behavior.                                      |
+| `apps/shared/OpenClawKit`       | Shared Apple client logic for protocol/chat/tool UX.                                   | Shared protocol models, chat UI components, gateway client behavior.                                      |
 | `vendor/a2ui`                   | Canvas rendering/spec substrate used by model-produced structured UI data.             | A2UI specification and renderer code used by canvas-related features.                                     |
 
 ## Secondary But Important
@@ -51,7 +51,7 @@ This is a focused map of the directories that drive model reasoning, tool use, c
 1. Start with `src/auto-reply/reply/get-reply.ts`.
 2. Follow into `src/auto-reply/reply/get-reply-run.ts`.
 3. Jump to `src/agents/pi-embedded-runner/run.ts` and `src/agents/pi-embedded-runner/run/attempt.ts`.
-4. Inspect `src/agents/pi-tools.ts`, `src/agents/opennipper-tools.ts`, and `src/agents/tools/*`.
+4. Inspect `src/agents/pi-tools.ts`, `src/agents/openclaw-tools.ts`, and `src/agents/tools/*`.
 5. Read `src/memory/*` and `src/media-understanding/*` for context enrichment.
 6. Finish with `src/channels/*`, `src/routing/*`, and `src/gateway/server-methods/*` to understand delivery.
 
