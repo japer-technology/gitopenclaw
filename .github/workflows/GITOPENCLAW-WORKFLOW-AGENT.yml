@@ -71,7 +71,13 @@ jobs:
           node-version: '22'
 
       - name: Install .GITOPENCLAW dependencies
-        run: cd .GITOPENCLAW && bun install
+        run: |
+          cd .GITOPENCLAW
+          if [[ ! -f bun.lock && ! -f bun.lockb ]]; then
+            echo "::error::.GITOPENCLAW lockfile missing. Run 'bun install' in .GITOPENCLAW and commit the lockfile."
+            exit 1
+          fi
+          bun install --frozen-lockfile
 
       - name: Run
         env:
