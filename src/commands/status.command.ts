@@ -3,6 +3,7 @@ import { withProgress } from "../cli/progress.js";
 import { resolveGatewayPort } from "../config/config.js";
 import { buildGatewayConnectionDetails, callGateway } from "../gateway/call.js";
 import { info } from "../globals.js";
+import { resolveGitOpenClawCIContext } from "../infra/ci-context.js";
 import { formatTimeAgo } from "../infra/format-time/format-relative.ts";
 import type { HeartbeatEventPayload } from "../infra/heartbeat-events.js";
 import { formatUsageReportLines, loadProviderUsageSummary } from "../infra/provider-usage.js";
@@ -230,6 +231,8 @@ export async function statusCommand(
     return links.httpUrl;
   })();
 
+  const ciCtx = resolveGitOpenClawCIContext();
+
   const gatewayValue = (() => {
     const target = remoteUrlMissing
       ? `fallback ${gatewayConnection.url}`
@@ -238,7 +241,9 @@ export async function statusCommand(
       ? warn("misconfigured (remote.url missing)")
       : gatewayReachable
         ? ok(`reachable ${formatDuration(gatewayProbe?.connectLatencyMs)}`)
-        : warn(gatewayProbe?.error ? `unreachable (${gatewayProbe.error})` : "unreachable");
+        : ciCtx.isCI
+          ? muted("not started (CI — commands run inline)")
+          : warn(gatewayProbe?.error ? `unreachable (${gatewayProbe.error})` : "unreachable");
     const auth =
       gatewayReachable && !remoteUrlMissing
         ? ` · auth ${formatGatewayAuthUsed(resolveGatewayProbeAuth(cfg))}`
@@ -278,6 +283,9 @@ export async function statusCommand(
     getNodeDaemonStatusSummary(),
   ]);
   const daemonValue = (() => {
+    if (ciCtx.isCI) {
+      return "n/a (CI environment)";
+    }
     if (daemon.installed === false) {
       return `${daemon.label} not installed`;
     }
@@ -285,6 +293,9 @@ export async function statusCommand(
     return `${daemon.label} ${installedPrefix}${daemon.loadedText}${daemon.runtimeShort ? ` · ${daemon.runtimeShort}` : ""}`;
   })();
   const nodeDaemonValue = (() => {
+    if (ciCtx.isCI) {
+      return "n/a (CI environment)";
+    }
     if (nodeDaemon.installed === false) {
       return `${nodeDaemon.label} not installed`;
     }

@@ -11,6 +11,7 @@ import { normalizeControlUiBasePath } from "../gateway/control-ui-shared.js";
 import { resolveGatewayProbeAuth } from "../gateway/probe-auth.js";
 import { probeGateway } from "../gateway/probe.js";
 import { collectChannelStatusIssues } from "../infra/channels-status-issues.js";
+import { resolveGitOpenClawCIContext } from "../infra/ci-context.js";
 import { resolveOpenClawPackageRoot } from "../infra/openclaw-root.js";
 import { resolveOsSummary } from "../infra/os-summary.js";
 import { inspectPortUsage } from "../infra/ports.js";
@@ -38,6 +39,7 @@ export async function statusAllCommand(
     progress.setLabel("Loading config…");
     const cfg = loadConfig();
     const osSummary = resolveOsSummary();
+    const ciCtx = resolveGitOpenClawCIContext();
     const snap = await readConfigFileSnapshot().catch(() => null);
     progress.tick();
 
@@ -237,9 +239,11 @@ export async function statusAllCommand(
     const gatewayTarget = remoteUrlMissing ? `fallback ${connection.url}` : connection.url;
     const gatewayStatus = gatewayReachable
       ? `reachable ${formatDurationPrecise(gatewayProbe?.connectLatencyMs ?? 0)}`
-      : gatewayProbe?.error
-        ? `unreachable (${gatewayProbe.error})`
-        : "unreachable";
+      : ciCtx.isCI
+        ? "not started (CI — commands run inline)"
+        : gatewayProbe?.error
+          ? `unreachable (${gatewayProbe.error})`
+          : "unreachable";
     const gatewayAuth = gatewayReachable ? ` · auth ${formatGatewayAuthUsed(probeAuth)}` : "";
     const gatewaySelfLine =
       gatewaySelf?.host || gatewaySelf?.ip || gatewaySelf?.version || gatewaySelf?.platform
@@ -264,7 +268,12 @@ export async function statusAllCommand(
       { Item: "Node", Value: process.versions.node },
       {
         Item: "Config",
-        Value: snap?.path?.trim() ? snap.path.trim() : "(unknown config path)",
+        Value:
+          ciCtx.isCI && ciCtx.isGitOpenClaw && ciCtx.configPath
+            ? `${ciCtx.configPath} (.GITOPENCLAW)`
+            : snap?.path?.trim()
+              ? snap.path.trim()
+              : "(unknown config path)",
       },
       dashboard
         ? { Item: "Dashboard", Value: dashboard }
@@ -292,19 +301,23 @@ export async function statusAllCommand(
       daemon
         ? {
             Item: "Gateway service",
-            Value: !daemon.installed
-              ? `${daemon.label} not installed`
-              : `${daemon.label} ${daemon.installed ? "installed · " : ""}${daemon.loadedText}${daemon.runtime?.status ? ` · ${daemon.runtime.status}` : ""}${daemon.runtime?.pid ? ` (pid ${daemon.runtime.pid})` : ""}`,
+            Value: ciCtx.isCI
+              ? "n/a (CI environment)"
+              : !daemon.installed
+                ? `${daemon.label} not installed`
+                : `${daemon.label} ${daemon.installed ? "installed · " : ""}${daemon.loadedText}${daemon.runtime?.status ? ` · ${daemon.runtime.status}` : ""}${daemon.runtime?.pid ? ` (pid ${daemon.runtime.pid})` : ""}`,
           }
-        : { Item: "Gateway service", Value: "unknown" },
+        : { Item: "Gateway service", Value: ciCtx.isCI ? "n/a (CI environment)" : "unknown" },
       nodeService
         ? {
             Item: "Node service",
-            Value: !nodeService.installed
-              ? `${nodeService.label} not installed`
-              : `${nodeService.label} ${nodeService.installed ? "installed · " : ""}${nodeService.loadedText}${nodeService.runtime?.status ? ` · ${nodeService.runtime.status}` : ""}${nodeService.runtime?.pid ? ` (pid ${nodeService.runtime.pid})` : ""}`,
+            Value: ciCtx.isCI
+              ? "n/a (CI environment)"
+              : !nodeService.installed
+                ? `${nodeService.label} not installed`
+                : `${nodeService.label} ${nodeService.installed ? "installed · " : ""}${nodeService.loadedText}${nodeService.runtime?.status ? ` · ${nodeService.runtime.status}` : ""}${nodeService.runtime?.pid ? ` (pid ${nodeService.runtime.pid})` : ""}`,
           }
-        : { Item: "Node service", Value: "unknown" },
+        : { Item: "Node service", Value: ciCtx.isCI ? "n/a (CI environment)" : "unknown" },
       {
         Item: "Agents",
         Value: `${agentStatus.agents.length} total · ${agentStatus.bootstrapPendingCount} bootstrapping · ${aliveAgents} active · ${agentStatus.totalSessions} sessions`,
@@ -336,6 +349,7 @@ export async function statusAllCommand(
         channelIssues,
         gatewayReachable,
         health,
+        ciCtx,
       },
     });
 
