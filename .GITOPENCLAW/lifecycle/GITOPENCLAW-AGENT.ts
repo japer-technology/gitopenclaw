@@ -79,7 +79,7 @@
  * - Bun runtime                   — for Bun.spawn and top-level await
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync, unlinkSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync, unlinkSync, appendFileSync } from "fs";
 import { resolve } from "path";
 import { resolveTrustLevel } from "./trust-level.ts";
 import type { TrustPolicy } from "./trust-level.ts";
@@ -92,6 +92,7 @@ const repoRoot = resolve(gitopenclawDir, "..");
 const stateDir = resolve(gitopenclawDir, "state");
 const issuesDir = resolve(stateDir, "issues");
 const sessionsDir = resolve(stateDir, "sessions");
+const usageLogPath = resolve(stateDir, "usage.log");
 const settingsPath = resolve(gitopenclawDir, "config", "settings.json");
 
 // The sessions directory as a relative path from repo root.
@@ -140,6 +141,7 @@ const configuredProvider: string = settings.defaultProvider;
 const configuredModel: string = settings.defaultModel;
 const configuredThinkingLevel: string = settings.defaultThinkingLevel ?? "high";
 const configuredTrustPolicy: TrustPolicy | undefined = settings.trustPolicy;
+const configuredLimits: { maxTokensPerRun?: number; maxToolCallsPerRun?: number; workflowTimeoutMinutes?: number } | undefined = settings.limits;
 
 if (!configuredProvider || !configuredModel) {
   throw new Error(`Invalid settings at ${settingsPath}: expected defaultProvider and defaultModel`);
@@ -385,6 +387,11 @@ try {
   const resolvedSessionId = sessionId || `issue-${issueNumber}`;
   openclawArgs.push("--session-id", resolvedSessionId);
 
+  // ── Apply workflowTimeoutMinutes as --timeout (Task 0.3) ──────────────────
+  if (configuredLimits?.workflowTimeoutMinutes) {
+    openclawArgs.push("--timeout", String(configuredLimits.workflowTimeoutMinutes));
+  }
+
   // ── Runtime isolation: source stays raw, runtime goes in .GITOPENCLAW ──────
   // Write a temporary config that points the agent's workspace at the repo root
   // so it can read the raw source code.  All mutable state (sessions, memory,
@@ -531,6 +538,91 @@ try {
       );
       throw new Error(`Semi-trusted run attempted denied tool(s): ${toolList}`);
     }
+  }
+
+  // ── Post-run usage logging and budget enforcement (Task 0.3) ──────────────
+  // Extract usage metadata from the agent's JSON output and append a one-line
+  // JSON entry to state/usage.log.  Also check token/tool-call limits.
+  const meta = (parsedAgentOutput as { meta?: Record<string, unknown> } | null)?.meta;
+  const agentMeta = meta?.agentMeta as { usage?: Record<string, unknown> } | undefined;
+  const usage = agentMeta?.usage as Record<string, number> | undefined;
+
+  const tokensUsed = typeof usage?.total === "number" ? usage.total : 0;
+  const tokensInput = typeof usage?.input === "number" ? usage.input : 0;
+  const tokensOutput = typeof usage?.output === "number" ? usage.output : 0;
+  const cacheRead = typeof usage?.cacheRead === "number" ? usage.cacheRead : 0;
+  const cacheWrite = typeof usage?.cacheWrite === "number" ? usage.cacheWrite : 0;
+  const durationMs = typeof meta?.durationMs === "number" ? meta.durationMs : 0;
+  const stopReason = typeof meta?.stopReason === "string" ? meta.stopReason : "";
+
+  // Count tool calls from the session transcript JSONL for accurate enforcement.
+  let toolCallCount = 0;
+  const transcriptPath = resolve(agentSessionsDir, `${resolvedSessionId}.jsonl`);
+  if (existsSync(transcriptPath)) {
+    try {
+      const lines = readFileSync(transcriptPath, "utf-8").split("\n").filter(Boolean);
+      for (const line of lines) {
+        try {
+          const entry = JSON.parse(line);
+          if (entry.role === "tool" || entry.type === "tool_call" || entry.type === "tool-call" || entry.type === "tool_use") {
+            toolCallCount++;
+          }
+        } catch {
+          // Skip malformed lines
+        }
+      }
+    } catch {
+      console.log("Could not parse session transcript for tool-call counting");
+    }
+  }
+
+  // Append usage entry to state/usage.log
+  const usageEntry = JSON.stringify({
+    timestamp: new Date().toISOString(),
+    issueNumber,
+    actor,
+    tokensUsed,
+    tokensInput,
+    tokensOutput,
+    cacheRead,
+    cacheWrite,
+    toolCallCount,
+    durationMs,
+    stopReason,
+  });
+  appendFileSync(usageLogPath, usageEntry + "\n");
+  console.log(`Usage logged: ${tokensUsed} tokens, ${toolCallCount} tool calls, ${durationMs}ms`);
+
+  // Check token budget violation
+  if (configuredLimits?.maxTokensPerRun && tokensUsed > configuredLimits.maxTokensPerRun) {
+    console.log(`⚠️ Token budget exceeded: ${tokensUsed} > ${configuredLimits.maxTokensPerRun}`);
+    await gh(
+      "issue",
+      "comment",
+      String(issueNumber),
+      "--body",
+      `⚠️ **Token Budget Exceeded**\n\n` +
+        `This agent run consumed **${tokensUsed.toLocaleString()}** tokens, ` +
+        `which exceeds the configured limit of **${configuredLimits.maxTokensPerRun.toLocaleString()}** tokens.\n\n` +
+        `The run completed, but future runs may be restricted. ` +
+        `Adjust \`limits.maxTokensPerRun\` in \`.GITOPENCLAW/config/settings.json\` if needed.`,
+    );
+  }
+
+  // Check tool-call limit violation
+  if (configuredLimits?.maxToolCallsPerRun && toolCallCount > configuredLimits.maxToolCallsPerRun) {
+    console.log(`⚠️ Tool-call limit exceeded: ${toolCallCount} > ${configuredLimits.maxToolCallsPerRun}`);
+    await gh(
+      "issue",
+      "comment",
+      String(issueNumber),
+      "--body",
+      `⚠️ **Tool-Call Limit Exceeded**\n\n` +
+        `This agent run made **${toolCallCount}** tool calls, ` +
+        `which exceeds the configured limit of **${configuredLimits.maxToolCallsPerRun}**.\n\n` +
+        `The run completed, but future runs may be restricted. ` +
+        `Adjust \`limits.maxToolCallsPerRun\` in \`.GITOPENCLAW/config/settings.json\` if needed.`,
+    );
   }
 
   // ── Archive session transcript to git-tracked state/sessions/ ──────────────

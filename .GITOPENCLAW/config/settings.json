@@ -6,5 +6,10 @@
     "trustedUsers": [],
     "semiTrustedRoles": ["write"],
     "untrustedBehavior": "read-only-response"
+  },
+  "limits": {
+    "maxTokensPerRun": 100000,
+    "maxToolCallsPerRun": 50,
+    "workflowTimeoutMinutes": 10
   }
 }

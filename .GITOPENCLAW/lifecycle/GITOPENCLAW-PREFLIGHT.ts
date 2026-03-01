@@ -151,6 +151,38 @@ if (existsSync(settingsPath) && existsSync(schemaPath)) {
         }
       }
     }
+
+    // ── Validate limits (Task 0.3) ───────────────────────────────────────────
+    if (settings.limits != null) {
+      const lim = settings.limits;
+      if (lim === null || typeof lim !== "object" || Array.isArray(lim)) {
+        errors.push('settings.json: "limits" must be an object');
+      } else {
+        if (lim.maxTokensPerRun != null) {
+          if (typeof lim.maxTokensPerRun !== "number" || !Number.isInteger(lim.maxTokensPerRun)) {
+            errors.push('settings.json: "limits.maxTokensPerRun" must be an integer');
+          } else if (lim.maxTokensPerRun < 1000) {
+            errors.push('settings.json: "limits.maxTokensPerRun" must be at least 1000');
+          }
+        }
+        if (lim.maxToolCallsPerRun != null) {
+          if (typeof lim.maxToolCallsPerRun !== "number" || !Number.isInteger(lim.maxToolCallsPerRun)) {
+            errors.push('settings.json: "limits.maxToolCallsPerRun" must be an integer');
+          } else if (lim.maxToolCallsPerRun < 1) {
+            errors.push('settings.json: "limits.maxToolCallsPerRun" must be at least 1');
+          }
+        }
+        if (lim.workflowTimeoutMinutes != null) {
+          if (typeof lim.workflowTimeoutMinutes !== "number" || !Number.isInteger(lim.workflowTimeoutMinutes)) {
+            errors.push('settings.json: "limits.workflowTimeoutMinutes" must be an integer');
+          } else if (lim.workflowTimeoutMinutes < 1) {
+            errors.push('settings.json: "limits.workflowTimeoutMinutes" must be at least 1');
+          } else if (lim.workflowTimeoutMinutes > 360) {
+            errors.push('settings.json: "limits.workflowTimeoutMinutes" must be at most 360');
+          }
+        }
+      }
+    }
   } catch (e) {
     errors.push(`settings.json: failed to parse — ${(e as Error).message}`);
   }
