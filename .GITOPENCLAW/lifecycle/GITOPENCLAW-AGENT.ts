@@ -83,6 +83,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync, unlin
 import { resolve } from "path";
 import { resolveTrustLevel } from "./trust-level.ts";
 import type { TrustPolicy } from "./trust-level.ts";
+import { parseCommand, MUTATION_COMMANDS, SUPPORTED_COMMANDS } from "./command-parser.ts";
 
 // ─── Paths and event context ───────────────────────────────────────────────────
 // `import.meta.dir` resolves to `.GITOPENCLAW/lifecycle/`; stepping up one level
@@ -365,6 +366,46 @@ try {
     console.log(
       `Semi-trusted actor "${actor}" — wrote tool-policy override and injected read-only directive`,
     );
+  }
+
+  // ── Slash command parsing (Task 1.1) ─────────────────────────────────────────
+  // Parse the prompt to detect slash commands (e.g., `/status`, `/config set …`).
+  // If a recognized slash command is found, route to the appropriate openclaw CLI
+  // subcommand.  Otherwise fall through to the default agent invocation.
+  const parsedCmd = parseCommand(prompt);
+  console.log(`Command parse: command=${parsedCmd.command}, args=[${parsedCmd.args.join(", ")}]`);
+
+  // Block mutation commands for semi-trusted actors.
+  if (trustLevel === "semi-trusted" && MUTATION_COMMANDS.has(parsedCmd.command)) {
+    await gh(
+      "issue",
+      "comment",
+      String(issueNumber),
+      "--body",
+      `⛔ **Permission Denied**\n\n` +
+        `The \`/${parsedCmd.command}\` command modifies configuration or state and requires **trusted** access.\n\n` +
+        `Your account (\`${actor}\`) has \`${actorPermission}\` permission (semi-trusted). ` +
+        `Ask a repository administrator to add your username to \`trustedUsers\` in \`.GITOPENCLAW/config/settings.json\` to use this command.`,
+    );
+    process.exit(0);
+  }
+
+  // For structured slash commands (anything other than natural language "agent"),
+  // build and run the corresponding `openclaw <command> <args>` CLI invocation
+  // and post the output directly — no agent session needed.
+  if (parsedCmd.command !== "agent" && parsedCmd.command in SUPPORTED_COMMANDS) {
+    const openclawBin = resolve(gitopenclawDir, "node_modules", ".bin", "openclaw");
+    const slashArgs = [openclawBin, parsedCmd.command, ...parsedCmd.args];
+    console.log(`Executing slash command: ${slashArgs.join(" ")}`);
+
+    const slashResult = await run(slashArgs);
+    const slashOutput = slashResult.stdout || "(no output)";
+    const slashComment =
+      `### \`/${parsedCmd.command}${parsedCmd.args.length ? " " + parsedCmd.args.join(" ") : ""}\`\n\n` +
+      "```\n" + slashOutput.slice(0, MAX_COMMENT_LENGTH - 200) + "\n```" +
+      (slashResult.exitCode !== 0 ? `\n\n⚠️ Command exited with code ${slashResult.exitCode}` : "");
+    await gh("issue", "comment", String(issueNumber), "--body", slashComment);
+    process.exit(0);
   }
 
   // ── Run the OpenClaw agent (Approach A: CLI invocation) ─────────────────────
