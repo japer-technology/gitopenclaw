@@ -1,5 +1,10 @@
 {
   "defaultProvider": "anthropic",
   "defaultModel": "claude-opus-4-6",
-  "defaultThinkingLevel": "high"
+  "defaultThinkingLevel": "high",
+  "trustPolicy": {
+    "trustedUsers": [],
+    "semiTrustedRoles": ["write"],
+    "untrustedBehavior": "read-only-response"
+  }
 }

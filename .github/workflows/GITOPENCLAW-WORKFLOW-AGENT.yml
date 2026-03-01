@@ -20,11 +20,13 @@ jobs:
       || (github.event_name == 'issue_comment' && github.event.comment.user.login != 'github-actions[bot]')
     steps:
       - name: Authorize
+        id: authorize
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           PERM=$(gh api "repos/${{ github.repository }}/collaborators/${{ github.actor }}/permission" --jq '.permission' 2>/dev/null || echo "none")
           echo "Actor: ${{ github.actor }}, Permission: $PERM"
+          echo "actor_permission=$PERM" >> "$GITHUB_OUTPUT"
           if [[ "$PERM" != "admin" && "$PERM" != "maintain" && "$PERM" != "write" ]]; then
             echo "::error::Unauthorized: ${{ github.actor }} has '$PERM' permission"
             exit 1
@@ -64,4 +66,5 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR_PERMISSION: ${{ steps.authorize.outputs.actor_permission }}
         run: bun .GITOPENCLAW/lifecycle/GITOPENCLAW-AGENT.ts
