@@ -44,6 +44,9 @@ jobs:
       - name: Guard
         run: bun .GITOPENCLAW/lifecycle/GITOPENCLAW-ENABLED.ts
 
+      - name: Preflight
+        run: bun .GITOPENCLAW/lifecycle/GITOPENCLAW-PREFLIGHT.ts
+
       - name: Preinstall
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

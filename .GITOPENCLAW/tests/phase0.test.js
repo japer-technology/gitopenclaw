@@ -638,3 +638,163 @@ describe("State persistence", () => {
     );
   });
 });
+
+// ── Settings schema (Task 0.1) ─────────────────────────────────────────────
+
+describe("Settings schema", () => {
+  it("settings.schema.json exists", () => {
+    assert.ok(
+      fs.existsSync(path.join(GITOPENCLAW, "config", "settings.schema.json")),
+      "Schema file must exist at config/settings.schema.json"
+    );
+  });
+
+  it("schema is valid JSON", () => {
+    const raw = readFile(".GITOPENCLAW/config/settings.schema.json");
+    assert.doesNotThrow(() => JSON.parse(raw), "Schema must be valid JSON");
+  });
+
+  it("schema defines defaultProvider as an enum", () => {
+    const schema = JSON.parse(readFile(".GITOPENCLAW/config/settings.schema.json"));
+    const prop = schema.properties?.defaultProvider;
+    assert.ok(prop, "Schema must define defaultProvider property");
+    assert.ok(Array.isArray(prop.enum), "defaultProvider must have an enum constraint");
+    assert.ok(prop.enum.includes("anthropic"), "Enum must include anthropic");
+    assert.ok(prop.enum.includes("openai"), "Enum must include openai");
+    assert.ok(prop.enum.includes("google"), "Enum must include google");
+    assert.ok(prop.enum.includes("bedrock"), "Enum must include bedrock");
+    assert.ok(prop.enum.includes("ollama"), "Enum must include ollama");
+  });
+
+  it("schema defines defaultModel as a non-empty string", () => {
+    const schema = JSON.parse(readFile(".GITOPENCLAW/config/settings.schema.json"));
+    const prop = schema.properties?.defaultModel;
+    assert.ok(prop, "Schema must define defaultModel property");
+    assert.strictEqual(prop.type, "string", "defaultModel must be a string");
+    assert.ok(prop.minLength >= 1, "defaultModel must require at least 1 character");
+  });
+
+  it("schema defines defaultThinkingLevel as an enum", () => {
+    const schema = JSON.parse(readFile(".GITOPENCLAW/config/settings.schema.json"));
+    const prop = schema.properties?.defaultThinkingLevel;
+    assert.ok(prop, "Schema must define defaultThinkingLevel property");
+    assert.ok(Array.isArray(prop.enum), "defaultThinkingLevel must have an enum constraint");
+    assert.ok(prop.enum.includes("none"), "Enum must include none");
+    assert.ok(prop.enum.includes("low"), "Enum must include low");
+    assert.ok(prop.enum.includes("medium"), "Enum must include medium");
+    assert.ok(prop.enum.includes("high"), "Enum must include high");
+  });
+
+  it("schema requires defaultProvider and defaultModel", () => {
+    const schema = JSON.parse(readFile(".GITOPENCLAW/config/settings.schema.json"));
+    assert.ok(Array.isArray(schema.required), "Schema must have a required array");
+    assert.ok(schema.required.includes("defaultProvider"), "defaultProvider must be required");
+    assert.ok(schema.required.includes("defaultModel"), "defaultModel must be required");
+  });
+
+  it("existing settings.json validates against the schema", () => {
+    const schema = JSON.parse(readFile(".GITOPENCLAW/config/settings.schema.json"));
+    const settings = JSON.parse(readFile(".GITOPENCLAW/config/settings.json"));
+
+    // Check required fields
+    for (const field of schema.required) {
+      assert.ok(field in settings, `settings.json must have required field "${field}"`);
+    }
+
+    // Check enum constraints
+    for (const [key, def] of Object.entries(schema.properties)) {
+      if (!(key in settings)) continue;
+      if (def.enum) {
+        assert.ok(
+          def.enum.includes(settings[key]),
+          `settings.json "${key}" value "${settings[key]}" must be in enum [${def.enum.join(", ")}]`
+        );
+      }
+    }
+  });
+});
+
+// ── Preflight validation (Task 0.1) ────────────────────────────────────────
+
+describe("Preflight validation", () => {
+  it("preflight script exists", () => {
+    assert.ok(
+      fs.existsSync(path.join(GITOPENCLAW, "lifecycle", "GITOPENCLAW-PREFLIGHT.ts")),
+      "Preflight script must exist at lifecycle/GITOPENCLAW-PREFLIGHT.ts"
+    );
+  });
+
+  it("preflight validates settings.json against the schema", () => {
+    const preflight = readFile(".GITOPENCLAW/lifecycle/GITOPENCLAW-PREFLIGHT.ts");
+    assert.ok(
+      preflight.includes("settings.schema.json") || preflight.includes("schemaPath"),
+      "Preflight must reference the settings schema"
+    );
+    assert.ok(
+      preflight.includes("settings.json"),
+      "Preflight must reference settings.json"
+    );
+  });
+
+  it("preflight checks for all required files", () => {
+    const preflight = readFile(".GITOPENCLAW/lifecycle/GITOPENCLAW-PREFLIGHT.ts");
+    assert.ok(preflight.includes("GITOPENCLAW-ENABLED.md"), "Must check for sentinel file");
+    assert.ok(preflight.includes("settings.json"), "Must check for settings.json");
+    assert.ok(preflight.includes("GITOPENCLAW-AGENT.ts"), "Must check for agent script");
+    assert.ok(preflight.includes("GITOPENCLAW-ENABLED.ts"), "Must check for guard script");
+    assert.ok(preflight.includes("GITOPENCLAW-INDICATOR.ts"), "Must check for indicator script");
+    assert.ok(preflight.includes("state/.gitignore") || preflight.includes("stateGitignorePath"), "Must check for state/.gitignore");
+  });
+
+  it("preflight verifies state/.gitignore contains secret-prevention entries", () => {
+    const preflight = readFile(".GITOPENCLAW/lifecycle/GITOPENCLAW-PREFLIGHT.ts");
+    assert.ok(
+      preflight.includes("credentials/"),
+      "Preflight must verify credentials/ is in state/.gitignore"
+    );
+    assert.ok(
+      preflight.includes("*.db"),
+      "Preflight must verify *.db is in state/.gitignore"
+    );
+  });
+
+  it("preflight exits non-zero on failure", () => {
+    const preflight = readFile(".GITOPENCLAW/lifecycle/GITOPENCLAW-PREFLIGHT.ts");
+    assert.ok(
+      preflight.includes("process.exit(1)"),
+      "Preflight must exit with code 1 on validation failure"
+    );
+  });
+
+  it("workflow template has Preflight step between Guard and Preinstall", () => {
+    const template = readFile(".GITOPENCLAW/install/GITOPENCLAW-WORKFLOW-AGENT.yml");
+    const guardIdx = template.indexOf("name: Guard");
+    const preflightIdx = template.indexOf("name: Preflight");
+    const preinstallIdx = template.indexOf("name: Preinstall");
+    assert.ok(guardIdx > 0, "Template must have Guard step");
+    assert.ok(preflightIdx > 0, "Template must have Preflight step");
+    assert.ok(preinstallIdx > 0, "Template must have Preinstall step");
+    assert.ok(guardIdx < preflightIdx, "Guard must come before Preflight");
+    assert.ok(preflightIdx < preinstallIdx, "Preflight must come before Preinstall");
+  });
+
+  it("installed workflow has Preflight step between Guard and Preinstall", () => {
+    const workflow = readFile(".github/workflows/GITOPENCLAW-WORKFLOW-AGENT.yml");
+    const guardIdx = workflow.indexOf("name: Guard");
+    const preflightIdx = workflow.indexOf("name: Preflight");
+    const preinstallIdx = workflow.indexOf("name: Preinstall");
+    assert.ok(guardIdx > 0, "Workflow must have Guard step");
+    assert.ok(preflightIdx > 0, "Workflow must have Preflight step");
+    assert.ok(preinstallIdx > 0, "Workflow must have Preinstall step");
+    assert.ok(guardIdx < preflightIdx, "Guard must come before Preflight");
+    assert.ok(preflightIdx < preinstallIdx, "Preflight must come before Preinstall");
+  });
+
+  it("Preflight step runs GITOPENCLAW-PREFLIGHT.ts via bun", () => {
+    const workflow = readFile(".github/workflows/GITOPENCLAW-WORKFLOW-AGENT.yml");
+    assert.ok(
+      workflow.includes("bun .GITOPENCLAW/lifecycle/GITOPENCLAW-PREFLIGHT.ts"),
+      "Preflight step must run via bun"
+    );
+  });
+});
