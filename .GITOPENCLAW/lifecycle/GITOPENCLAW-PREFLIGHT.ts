@@ -113,6 +113,44 @@ if (existsSync(settingsPath) && existsSync(schemaPath)) {
         errors.push(`settings.json: "${key}" must be at least ${def.minLength} character(s) long`);
       }
     }
+
+    // ── Validate trustPolicy (Task 0.2) ─────────────────────────────────────
+    if (settings.trustPolicy != null) {
+      const tp = settings.trustPolicy;
+      if (tp === null || typeof tp !== "object" || Array.isArray(tp)) {
+        errors.push('settings.json: "trustPolicy" must be an object');
+      } else {
+        if (tp.trustedUsers != null) {
+          if (!Array.isArray(tp.trustedUsers)) {
+            errors.push('settings.json: "trustPolicy.trustedUsers" must be an array of strings');
+          } else if (tp.trustedUsers.some((u: unknown) => typeof u !== "string")) {
+            errors.push('settings.json: "trustPolicy.trustedUsers" entries must be strings');
+          }
+        }
+        if (tp.semiTrustedRoles != null) {
+          const validRoles = ["admin", "maintain", "write"];
+          if (!Array.isArray(tp.semiTrustedRoles)) {
+            errors.push('settings.json: "trustPolicy.semiTrustedRoles" must be an array');
+          } else {
+            for (const role of tp.semiTrustedRoles) {
+              if (!validRoles.includes(role)) {
+                errors.push(
+                  `settings.json: "trustPolicy.semiTrustedRoles" contains invalid value "${role}" (must be one of [${validRoles.join(", ")}])`
+                );
+              }
+            }
+          }
+        }
+        if (tp.untrustedBehavior != null) {
+          const validBehaviors = ["read-only-response", "block"];
+          if (!validBehaviors.includes(tp.untrustedBehavior)) {
+            errors.push(
+              `settings.json: "trustPolicy.untrustedBehavior" must be one of [${validBehaviors.join(", ")}], got "${tp.untrustedBehavior}"`
+            );
+          }
+        }
+      }
+    }
   } catch (e) {
     errors.push(`settings.json: failed to parse — ${(e as Error).message}`);
   }

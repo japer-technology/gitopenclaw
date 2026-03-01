@@ -79,8 +79,10 @@
  * - Bun runtime                   — for Bun.spawn and top-level await
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync, unlinkSync } from "fs";
 import { resolve } from "path";
+import { resolveTrustLevel } from "./trust-level.ts";
+import type { TrustPolicy } from "./trust-level.ts";
 
 // ─── Paths and event context ───────────────────────────────────────────────────
 // `import.meta.dir` resolves to `.GITOPENCLAW/lifecycle/`; stepping up one level
@@ -137,12 +139,31 @@ const settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
 const configuredProvider: string = settings.defaultProvider;
 const configuredModel: string = settings.defaultModel;
 const configuredThinkingLevel: string = settings.defaultThinkingLevel ?? "high";
+const configuredTrustPolicy: TrustPolicy | undefined = settings.trustPolicy;
 
 if (!configuredProvider || !configuredModel) {
   throw new Error(
     `Invalid settings at ${settingsPath}: expected defaultProvider and defaultModel`
   );
 }
+
+// ─── Trust-level resolution ───────────────────────────────────────────────────
+// Resolve the trust tier for the current actor *before* invoking the agent.
+// The actor and their permission level come from the workflow environment:
+//   GITHUB_ACTOR   — set by GitHub Actions (the user who triggered the workflow)
+//   ACTOR_PERMISSION — set by the Authorize step (admin/maintain/write/read/none)
+const actor = process.env.GITHUB_ACTOR ?? "";
+const actorPermission = process.env.ACTOR_PERMISSION ?? "none";
+
+if (!actor) {
+  throw new Error("GITHUB_ACTOR is not set — cannot resolve trust level outside GitHub Actions");
+}
+
+const trustLevel = resolveTrustLevel(actor, actorPermission, configuredTrustPolicy);
+console.log(`Trust resolution: actor=${actor}, permission=${actorPermission}, level=${trustLevel}`);
+
+// Path for the tool-policy override file (written for semi-trusted actors, cleaned up in finally).
+const toolPolicyOverridePath = resolve(stateDir, "tool-policy-override.json");
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -287,6 +308,50 @@ try {
       `If you have set it as an organization secret, ensure this repository has been granted access ` +
       `(Organization Settings → Secrets and variables → Actions → ${requiredKeyName} → Repository access).`
     );
+  }
+
+  // ── Trust-level gating ──────────────────────────────────────────────────────
+  // Enforce trust policy before allowing the agent to run.  Untrusted actors
+  // are blocked (or given a read-only explanation) without invoking the agent.
+  if (trustLevel === "untrusted") {
+    const behavior = configuredTrustPolicy?.untrustedBehavior ?? "read-only-response";
+    if (behavior === "block") {
+      await gh(
+        "issue", "comment", String(issueNumber),
+        "--body",
+        `⛔ **Access Denied**\n\nYour account (\`${actor}\`) does not have sufficient permissions to interact with the GitOpenClaw agent on this repository.`,
+      );
+      throw new Error(`Untrusted actor "${actor}" blocked by trust policy (untrustedBehavior=block)`);
+    }
+    // "read-only-response" — post an explanation and exit gracefully.
+    await gh(
+      "issue", "comment", String(issueNumber),
+      "--body",
+      `ℹ️ **Read-Only Mode**\n\nYour account (\`${actor}\`) has \`${actorPermission}\` permission, which is below the trust threshold configured for this repository. The agent cannot perform actions on your behalf.\n\nIf you believe this is an error, ask a repository administrator to add your username to \`trustedUsers\` in \`.GITOPENCLAW/config/settings.json\`.`,
+    );
+    // Exit without error — the user was informed.
+    process.exit(0);
+  }
+
+  // ── Semi-trusted: restrict agent to read-only tools ─────────────────────────
+  // For semi-trusted actors, inject a system-prompt-level restriction into the
+  // agent's message and write a tool-policy override for audit purposes.
+  if (trustLevel === "semi-trusted") {
+    const readOnlyDirective =
+      "You are operating in read-only mode. Do not use bash, edit, or create tools. " +
+      "Only answer questions and provide information based on the repository contents.\n\n";
+    prompt = readOnlyDirective + prompt;
+
+    // Write a tool-policy override for audit purposes.  The format mirrors
+    // OpenClaw's internal tool-profile structure (profile name + deny list).
+    // This file is NOT consumed by the agent subprocess (which uses system-prompt
+    // restriction); it exists solely for post-run audit and is deleted in the
+    // finally block to avoid stale permissions on subsequent runs.
+    writeFileSync(
+      toolPolicyOverridePath,
+      JSON.stringify({ profile: "minimal", deny: ["bash", "edit", "create"] }, null, 2) + "\n",
+    );
+    console.log(`Semi-trusted actor "${actor}" — wrote tool-policy override and injected read-only directive`);
   }
 
   // ── Run the OpenClaw agent (Approach A: CLI invocation) ─────────────────────
@@ -472,6 +537,18 @@ try {
   await gh("issue", "comment", String(issueNumber), "--body", commentBody);
 
 } finally {
+  // ── Guaranteed cleanup: remove tool-policy override ─────────────────────────
+  // Delete the tool-policy-override.json written for semi-trusted actors so
+  // stale policy files don't persist across subsequent runs.
+  try {
+    if (existsSync(toolPolicyOverridePath)) {
+      unlinkSync(toolPolicyOverridePath);
+      console.log("Cleaned up tool-policy-override.json");
+    }
+  } catch (e) {
+    console.error("Failed to clean up tool-policy-override.json:", e);
+  }
+
   // ── Guaranteed cleanup: remove 👀 reaction ───────────────────────────────────
   // This block always executes — even when the try block throws — ensuring the
   // 👀 activity indicator is always removed so users know the agent has stopped.
