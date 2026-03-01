@@ -158,6 +158,20 @@ describe("Agent limits enforcement", () => {
     );
   });
 
+  it("converts workflowTimeoutMinutes to seconds for --timeout", () => {
+    assert.ok(
+      agent.includes("workflowTimeoutMinutes * 60"),
+      "Agent must convert minutes to seconds when passing --timeout (multiply by 60)"
+    );
+  });
+
+  it("sets timeoutSeconds in the runtime config", () => {
+    assert.ok(
+      agent.includes("timeoutSeconds"),
+      "Runtime config must include agents.defaults.timeoutSeconds"
+    );
+  });
+
   it("extracts usage metadata from agent JSON output", () => {
     assert.ok(
       agent.includes("agentMeta"),

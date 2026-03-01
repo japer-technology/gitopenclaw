@@ -420,4 +420,15 @@ void describe("Agent command-parser integration", () => {
       "Agent must post a denial message for blocked mutation commands",
     );
   });
+
+  void it("handles /help locally without shelling out to openclaw binary", () => {
+    assert.ok(
+      agent.includes('parsedCmd.command === "help"'),
+      "Agent must handle /help as a special built-in command",
+    );
+    assert.ok(
+      agent.includes("Available Slash Commands"),
+      "Agent must generate a formatted list of available commands for /help",
+    );
+  });
 });
