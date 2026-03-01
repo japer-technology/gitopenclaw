@@ -564,6 +564,8 @@ try {
       for (const line of lines) {
         try {
           const entry = JSON.parse(line);
+          // Check multiple JSONL format variants: OpenClaw transcripts may use
+          // different schemas depending on version (role-based or type-based).
           if (entry.role === "tool" || entry.type === "tool_call" || entry.type === "tool-call" || entry.type === "tool_use") {
             toolCallCount++;
           }
@@ -602,8 +604,8 @@ try {
       String(issueNumber),
       "--body",
       `⚠️ **Token Budget Exceeded**\n\n` +
-        `This agent run consumed **${tokensUsed.toLocaleString()}** tokens, ` +
-        `which exceeds the configured limit of **${configuredLimits.maxTokensPerRun.toLocaleString()}** tokens.\n\n` +
+        `This agent run consumed **${tokensUsed.toLocaleString("en-US")}** tokens, ` +
+        `which exceeds the configured limit of **${configuredLimits.maxTokensPerRun.toLocaleString("en-US")}** tokens.\n\n` +
         `The run completed, but future runs may be restricted. ` +
         `Adjust \`limits.maxTokensPerRun\` in \`.GITOPENCLAW/config/settings.json\` if needed.`,
     );
