@@ -44,6 +44,29 @@
         }
       },
       "additionalProperties": false
+    },
+    "limits": {
+      "type": "object",
+      "description": "Cost and resource boundaries for agent runs",
+      "properties": {
+        "maxTokensPerRun": {
+          "type": "integer",
+          "minimum": 1000,
+          "description": "Maximum total tokens (input + output) allowed per agent run"
+        },
+        "maxToolCallsPerRun": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum number of tool calls allowed per agent run"
+        },
+        "workflowTimeoutMinutes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 360,
+          "description": "Hard time boundary in minutes for the agent workflow (GitHub Actions max: 360)"
+        }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": true
